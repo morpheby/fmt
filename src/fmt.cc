@@ -1,4 +1,3 @@
-module;
 
 #define FMT_MODULE
 
@@ -35,7 +34,7 @@ module;
 #  include <memory>
 #  include <optional>
 #  include <ostream>
-#  include <source_location>
+#  include <experimental/source_location>
 #  include <stdexcept>
 #  include <string>
 #  include <string_view>
@@ -45,7 +44,9 @@ module;
 #  include <typeinfo>
 #  include <utility>
 #  include <variant>
-#  include <vector>
+#  if __has_include(<winapifamily.h>)
+#    include <vector>
+#  endif
 #else
 #  include <limits.h>
 #  include <stdint.h>
@@ -56,7 +57,7 @@ module;
 #endif
 #include <cerrno>
 #include <climits>
-#include <version>
+#include <ciso646>
 
 #if __has_include(<cxxabi.h>)
 #  include <cxxabi.h>
@@ -91,15 +92,13 @@ module;
 #  include <windows.h>
 #endif
 
-export module fmt;
-
 #ifdef FMT_IMPORT_STD
 import std;
 #endif
 
-#define FMT_EXPORT export
-#define FMT_BEGIN_EXPORT export {
-#define FMT_END_EXPORT }
+#define FMT_EXPORT 
+#define FMT_BEGIN_EXPORT 
+#define FMT_END_EXPORT 
 
 // If you define FMT_ATTACH_TO_GLOBAL_MODULE
 //  - all declarations are detached from module 'fmt'

@@ -372,9 +372,6 @@ struct formatter<std::bitset<N>, Char>
   }
 };
 
-template <typename Char>
-struct formatter<std::thread::id, Char> : basic_ostream_formatter<Char> {};
-
 #ifdef __cpp_lib_optional
 template <typename T, typename Char>
 struct formatter<std::optional<T>, Char,
