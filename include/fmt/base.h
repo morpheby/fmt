@@ -982,6 +982,18 @@ template <typename S,
           typename V = decltype(detail::to_string_view(std::declval<S>()))>
 using char_t = typename V::value_type;
 
+#ifndef FMT_FLOAT_SUPPORTED
+#  define FMT_FLOAT_SUPPORTED 1
+#endif
+
+#ifndef FMT_DOUBLE_SUPPORTED
+#  define FMT_DOUBLE_SUPPORTED 1
+#endif
+
+#ifndef FMT_LONG_DOUBLE_SUPPORTED
+#  define FMT_LONG_DOUBLE_SUPPORTED 1
+#endif
+
 enum class type {
   none_type,
   // Integer types should go first,
@@ -995,10 +1007,24 @@ enum class type {
   char_type,
   last_integer_type = char_type,
   // followed by floating-point types.
+  #if FMT_FLOAT_SUPPORTED
   float_type,
+  #endif
+  #if FMT_DOUBLE_SUPPORTED
   double_type,
+  #endif
+  #if FMT_LONG_DOUBLE_SUPPORTED
   long_double_type,
+  #endif
+  #if FMT_LONG_DOUBLE_SUPPORTED
   last_numeric_type = long_double_type,
+  #elif FMT_DOUBLE_SUPPORTED
+  last_numeric_type = double_type,
+  #elif FMT_FLOAT_SUPPORTED
+  last_numeric_type = float_type,
+  #else
+  last_numeric_type = last_integer_type,
+  #endif
   cstring_type,
   string_type,
   pointer_type,
@@ -1022,9 +1048,19 @@ FMT_TYPE_CONSTANT(int128_opt, int128_type);
 FMT_TYPE_CONSTANT(uint128_opt, uint128_type);
 FMT_TYPE_CONSTANT(bool, bool_type);
 FMT_TYPE_CONSTANT(Char, char_type);
+
+#if FMT_FLOAT_SUPPORTED
 FMT_TYPE_CONSTANT(float, float_type);
+#endif
+
+#if FMT_DOUBLE_SUPPORTED
 FMT_TYPE_CONSTANT(double, double_type);
+#endif
+
+#if FMT_LONG_DOUBLE_SUPPORTED
 FMT_TYPE_CONSTANT(long double, long_double_type);
+#endif
+
 FMT_TYPE_CONSTANT(const Char*, cstring_type);
 FMT_TYPE_CONSTANT(basic_string_view<Char>, string_type);
 FMT_TYPE_CONSTANT(const void*, pointer_type);
@@ -1049,8 +1085,25 @@ enum {
              set(type::uint128_type),
   bool_set = set(type::bool_type),
   char_set = set(type::char_type),
-  float_set = set(type::float_type) | set(type::double_type) |
-              set(type::long_double_type),
+  float_set = 
+  #if FMT_FLOAT_SUPPORTED
+  set(type::float_type)
+  #else
+  0
+  #endif
+  |
+  #if FMT_DOUBLE_SUPPORTED
+  set(type::double_type)
+  #else
+  0
+  #endif
+  |
+  #if FMT_LONG_DOUBLE_SUPPORTED
+  set(type::long_double_type)
+  #else
+  0
+  #endif
+  ,
   string_set = set(type::string_type),
   cstring_set = set(type::cstring_type),
   pointer_set = set(type::pointer_type)
@@ -1203,9 +1256,15 @@ template <typename Char> struct type_mapper {
   static auto map(T) -> conditional_t<
       std::is_same<T, char>::value || std::is_same<T, Char>::value, Char, void>;
 
+  #if FMT_FLOAT_SUPPORTED
   static auto map(float) -> float;
+  #endif
+  #if FMT_DOUBLE_SUPPORTED
   static auto map(double) -> double;
+  #endif
+  #if FMT_LONG_DOUBLE_SUPPORTED
   static auto map(long double) -> long double;
+  #endif
 
   static auto map(Char*) -> const Char*;
   static auto map(const Char*) -> const Char*;
@@ -2189,9 +2248,15 @@ template <typename Context> class value {
     uint128_opt uint128_value;
     bool bool_value;
     char_type char_value;
+    #if FMT_FLOAT_SUPPORTED
     float float_value;
+    #endif
+    #if FMT_DOUBLE_SUPPORTED
     double double_value;
+    #endif
+    #if FMT_LONG_DOUBLE_SUPPORTED
     long double long_double_value;
+    #endif
     const void* pointer;
     string_value<char_type> string;
     custom_value<Context> custom;
@@ -2231,9 +2296,17 @@ template <typename Context> class value {
         "mixing character types is disallowed");
   }
 
+  #if FMT_FLOAT_SUPPORTED
   constexpr FMT_INLINE value(float x FMT_BUILTIN) : float_value(x) {}
+  #endif
+
+  #if FMT_DOUBLE_SUPPORTED
   constexpr FMT_INLINE value(double x FMT_BUILTIN) : double_value(x) {}
+  #endif
+
+  #if FMT_LONG_DOUBLE_SUPPORTED
   FMT_INLINE value(long double x FMT_BUILTIN) : long_double_value(x) {}
+  #endif
 
   FMT_CONSTEXPR FMT_INLINE value(char_type* x FMT_BUILTIN) {
     string.data = x;
@@ -2553,9 +2626,15 @@ template <typename Context> class basic_format_arg {
     case detail::type::uint128_type:     return vis(map(value_.uint128_value));
     case detail::type::bool_type:        return vis(value_.bool_value);
     case detail::type::char_type:        return vis(value_.char_value);
+    #if FMT_FLOAT_SUPPORTED
     case detail::type::float_type:       return vis(value_.float_value);
+    #endif
+    #if FMT_DOUBLE_SUPPORTED
     case detail::type::double_type:      return vis(value_.double_value);
+    #endif
+    #if FMT_LONG_DOUBLE_SUPPORTED
     case detail::type::long_double_type: return vis(value_.long_double_value);
+    #endif
     case detail::type::cstring_type:     return vis(value_.string.data);
     case detail::type::string_type:      return vis(value_.string.str());
     case detail::type::pointer_type:     return vis(value_.pointer);

@@ -11,7 +11,7 @@
     "build": {
         "includeDir": "include",
         "srcDir": "src",
-        "srcFilter": "fmt.cc"
+        "srcFilter": "fmt.cc,format.cc"
     },
     "examples": [
         "test/"

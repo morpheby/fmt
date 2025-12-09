@@ -270,6 +270,8 @@ inline auto divide_by_10_to_kappa_plus_1(uint64_t n) noexcept -> uint64_t {
 // Various subroutines using pow10 cache
 template <typename T> struct cache_accessor;
 
+#if FMT_FLOAT_SUPPORTED
+
 template <> struct cache_accessor<float> {
   using carrier_uint = float_info<float>::carrier_uint;
   using cache_entry_type = uint64_t;
@@ -363,6 +365,18 @@ template <> struct cache_accessor<float> {
            2;
   }
 };
+
+#if !FMT_DOUBLE_SUPPORTED
+
+FMT_FUNC auto get_cached_power(int k) noexcept -> uint64_t {
+  return cache_accessor<float>::get_cached_power(k);
+}
+
+#endif
+
+#endif  // FMT_FLOAT_SUPPORTED
+
+#if FMT_DOUBLE_SUPPORTED
 
 template <> struct cache_accessor<double> {
   using carrier_uint = float_info<double>::carrier_uint;
@@ -1141,6 +1155,8 @@ template <> struct cache_accessor<double> {
 FMT_FUNC auto get_cached_power(int k) noexcept -> uint128_fallback {
   return cache_accessor<double>::get_cached_power(k);
 }
+
+#endif  // FMT_USE_FULL_CACHE_DRAGONBOX
 
 // Various integer checks
 template <typename T>

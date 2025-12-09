@@ -730,8 +730,13 @@ struct is_fast_float : bool_constant<std::numeric_limits<T>::is_iec559 &&
                                      sizeof(T) <= sizeof(double)> {};
 template <typename T> struct is_fast_float<T, false> : std::false_type {};
 
+#if FMT_DOUBLE_SUPPORTED
 template <typename T>
 using fast_float_t = conditional_t<sizeof(T) == sizeof(double), double, float>;
+#else
+template <typename T>
+using fast_float_t = float;
+#endif
 
 template <typename T>
 using is_double_double = bool_constant<std::numeric_limits<T>::digits == 106>;
@@ -1446,10 +1451,16 @@ inline auto umul192_upper128(uint64_t x, uint128_fallback y) noexcept
   return r;
 }
 
+#if FMT_DOUBLE_SUPPORTED
 FMT_API auto get_cached_power(int k) noexcept -> uint128_fallback;
+#elif FMT_FLOAT_SUPPORTED
+FMT_API auto get_cached_power(int k) noexcept -> uint64_t;
+#endif
 
 // Type-specific information that Dragonbox uses.
 template <typename T, typename Enable = void> struct float_info;
+
+#if FMT_FLOAT_SUPPORTED
 
 template <> struct float_info<float> {
   using carrier_uint = uint32_t;
@@ -1463,6 +1474,10 @@ template <> struct float_info<float> {
   static const int shorter_interval_tie_upper_threshold = -35;
 };
 
+#endif  // FMT_FLOAT_SUPPORTED
+
+#if FMT_DOUBLE_SUPPORTED
+
 template <> struct float_info<double> {
   using carrier_uint = uint64_t;
   static const int exponent_bits = 11;
@@ -1475,6 +1490,8 @@ template <> struct float_info<double> {
   static const int shorter_interval_tie_upper_threshold = -77;
 };
 
+#endif  // FMT_DOUBLE_SUPPORTED
+
 // An 80- or 128-bit floating point number.
 template <typename T>
 struct float_info<T, enable_if_t<std::numeric_limits<T>::digits == 64 ||
@@ -1484,11 +1501,15 @@ struct float_info<T, enable_if_t<std::numeric_limits<T>::digits == 64 ||
   static const int exponent_bits = 15;
 };
 
+#if FMT_LONG_DOUBLE_SUPPORTED
+
 // A double-double floating point number.
 template <typename T>
 struct float_info<T, enable_if_t<is_double_double<T>::value>> {
   using carrier_uint = detail::uint128_t;
 };
+
+#endif  // FMT_LONG_DOUBLE_SUPPORTED
 
 template <typename T> struct decimal_fp {
   using significand_type = typename float_info<T>::carrier_uint;
@@ -1650,9 +1671,15 @@ FMT_CONSTEXPR inline auto operator*(fp x, fp y) -> fp {
   return {multiply(x.f, y.f), x.e + y.e + 64};
 }
 
+#if FMT_FLOAT_SUPPORTED && !(FMT_DOUBLE_SUPPORTED)
+template <typename T>
+using convert_float_result =
+    conditional_t<std::is_same<T, float>::value, float, T>;
+#elif FMT_DOUBLE_SUPPORTED
 template <typename T, bool doublish = num_bits<T>() == num_bits<double>()>
 using convert_float_result =
     conditional_t<std::is_same<T, float>::value || doublish, double, T>;
+#endif
 
 template <typename T>
 constexpr auto convert_float(T value) -> convert_float_result<T> {
@@ -2624,6 +2651,9 @@ template <typename T>
 struct has_isfinite<T, enable_if_t<sizeof(std::isfinite(T())) != 0>>
     : std::true_type {};
 
+#if FMT_DOUBLE_SUPPORTED
+
+
 template <typename T,
           FMT_ENABLE_IF(is_floating_point<T>::value&& has_isfinite<T>::value)>
 FMT_CONSTEXPR20 auto isfinite(T value) -> bool {
@@ -2651,6 +2681,39 @@ FMT_INLINE FMT_CONSTEXPR auto signbit(T value) -> bool {
   }
   return std::signbit(static_cast<double>(value));
 }
+
+#elif FMT_FLOAT_SUPPORTED
+
+
+template <typename T,
+          FMT_ENABLE_IF(is_floating_point<T>::value&& has_isfinite<T>::value)>
+FMT_CONSTEXPR20 auto isfinite(T value) -> bool {
+  constexpr T inf = T(std::numeric_limits<float>::infinity());
+  if (is_constant_evaluated())
+    return !detail::isnan(value) && value < inf && value > -inf;
+  return std::isfinite(value);
+}
+template <typename T, FMT_ENABLE_IF(!has_isfinite<T>::value)>
+FMT_CONSTEXPR auto isfinite(T value) -> bool {
+  T inf = T(std::numeric_limits<float>::infinity());
+  // std::isfinite doesn't support __float128.
+  return !detail::isnan(value) && value < inf && value > -inf;
+}
+
+template <typename T, FMT_ENABLE_IF(is_floating_point<T>::value)>
+FMT_INLINE FMT_CONSTEXPR auto signbit(T value) -> bool {
+  if (is_constant_evaluated()) {
+#ifdef __cpp_if_constexpr
+    if constexpr (std::numeric_limits<float>::is_iec559) {
+      auto bits = detail::bit_cast<uint64_t>(static_cast<float>(value));
+      return (bits >> (num_bits<uint64_t>() - 1)) != 0;
+    }
+#endif
+  }
+  return std::signbit(static_cast<float>(value));
+}
+
+#endif  // FMT_DOUBLE_SUPPORTED
 
 inline FMT_CONSTEXPR20 void adjust_precision(int& precision, int exp10) {
   // Adjust fixed precision by exponent because it is relative to decimal
@@ -3048,9 +3111,11 @@ FMT_CONSTEXPR20 inline void format_dragon(basic_fp<uint128_t> value,
 template <typename Float, FMT_ENABLE_IF(!is_double_double<Float>::value)>
 FMT_CONSTEXPR20 void format_hexfloat(Float value, format_specs specs,
                                      buffer<char>& buf) {
+  #if FMT_DOUBLE_SUPPORTED
   // float is passed as double to reduce the number of instantiations and to
   // simplify implementation.
   static_assert(!std::is_same<Float, float>::value, "");
+  #endif
 
   using info = dragonbox::float_info<Float>;
 
@@ -3125,11 +3190,15 @@ FMT_CONSTEXPR20 void format_hexfloat(Float value, format_specs specs,
   format_decimal<char>(appender(buf), abs_e, detail::count_digits(abs_e));
 }
 
+#if FMT_DOUBLE_SUPPORTED
+
 template <typename Float, FMT_ENABLE_IF(is_double_double<Float>::value)>
 FMT_CONSTEXPR20 void format_hexfloat(Float value, format_specs specs,
                                      buffer<char>& buf) {
   format_hexfloat(static_cast<double>(value), specs, buf);
 }
+
+#endif
 
 constexpr auto fractional_part_rounding_thresholds(int index) -> uint32_t {
   // For checking rounding thresholds.
@@ -3146,8 +3215,10 @@ template <typename Float>
 FMT_CONSTEXPR20 auto format_float(Float value, int precision,
                                   const format_specs& specs, bool binary32,
                                   buffer<char>& buf) -> int {
+  #if FMT_DOUBLE_SUPPORTED
   // float is passed as double to reduce the number of instantiations.
   static_assert(!std::is_same<Float, float>::value, "");
+  #endif
   auto converted_value = convert_float(value);
 
   const bool fixed = specs.type() == presentation_type::fixed;
@@ -3164,43 +3235,59 @@ FMT_CONSTEXPR20 auto format_float(Float value, int precision,
   int exp = 0;
   bool use_dragon = true;
   unsigned dragon_flags = 0;
+
+  #if FMT_FLOAT_SUPPORTED
   if (!is_fast_float<Float>() || is_constant_evaluated()) {
+    #if FMT_DOUBLE_SUPPORTED
     const auto inv_log2_10 = 0.3010299956639812;  // 1 / log2(10)
+    const auto e_10 = 1e-10;
+    #else
+    const auto inv_log2_10 = 0.3010299956639812f;  // 1 / log2(10)
+    const auto e_10 = 1e-10f;
+    #endif
     using info = dragonbox::float_info<decltype(converted_value)>;
     const auto f = basic_fp<typename info::carrier_uint>(converted_value);
     // Compute exp, an approximate power of 10, such that
     //   10^(exp - 1) <= value < 10^exp or 10^exp <= value < 10^(exp + 1).
     // This is based on log10(value) == log2(value) / log2(10) and approximation
     // of log2(value) by e + num_fraction_bits idea from double-conversion.
-    auto e = (f.e + count_digits<1>(f.f) - 1) * inv_log2_10 - 1e-10;
+    auto e = (f.e + count_digits<1>(f.f) - 1) * inv_log2_10 - e_10;
     exp = static_cast<int>(e);
     if (e > exp) ++exp;  // Compute ceil.
     dragon_flags = dragon::fixup;
   } else {
     // Extract significand bits and exponent bits.
-    using info = dragonbox::float_info<double>;
-    auto br = bit_cast<uint64_t>(static_cast<double>(value));
+    #if FMT_DOUBLE_SUPPORTED
+    using float_type = double;
+    using int_type = uint64_t;
+    #else
+    using float_type = float;
+    using int_type = uint32_t;
+    #endif
 
-    const uint64_t significand_mask =
-        (static_cast<uint64_t>(1) << num_significand_bits<double>()) - 1;
+    using info = dragonbox::float_info<float_type>;
+    auto br = bit_cast<int_type>(static_cast<float_type>(value));
+
+    const int_type significand_mask =
+        (static_cast<int_type>(1) << num_significand_bits<float_type>()) - 1;
     uint64_t significand = (br & significand_mask);
-    int exponent = static_cast<int>((br & exponent_mask<double>()) >>
-                                    num_significand_bits<double>());
+    int exponent = static_cast<int_type>((br & exponent_mask<float_type>()) >>
+                                    num_significand_bits<float_type>());
 
     if (exponent != 0) {  // Check if normal.
-      exponent -= exponent_bias<double>() + num_significand_bits<double>();
+      exponent -= exponent_bias<float_type>() + num_significand_bits<float_type>();
       significand |=
-          (static_cast<uint64_t>(1) << num_significand_bits<double>());
+          (static_cast<int_type>(1) << num_significand_bits<float_type>());
       significand <<= 1;
     } else {
       // Normalize subnormal inputs.
       FMT_ASSERT(significand != 0, "zeros should not appear here");
       int shift = countl_zero(significand);
-      FMT_ASSERT(shift >= num_bits<uint64_t>() - num_significand_bits<double>(),
+      FMT_ASSERT(shift >= num_bits<int_type>() - num_significand_bits<float_type>(),
                  "");
-      shift -= (num_bits<uint64_t>() - num_significand_bits<double>() - 2);
-      exponent = (std::numeric_limits<double>::min_exponent -
-                  num_significand_bits<double>()) -
+      shift -= (num_bits<int_type>() - num_significand_bits<float_type>() - 2);
+      exponent = (std::numeric_limits<float_type>::min_exponent -
+                  num_significand_bits<float_type>()) -
                  shift;
       significand <<= shift;
     }
@@ -3247,7 +3334,7 @@ FMT_CONSTEXPR20 auto format_float(Float value, int precision,
         } else {
           // We may need to round-up.
           buf.try_resize(1);
-          if ((first_segment | static_cast<uint64_t>(has_more_segments)) >
+          if ((first_segment | static_cast<int_type>(has_more_segments)) >
               5000000000000000000ULL) {
             buf[0] = '1';
           } else {
@@ -3417,6 +3504,8 @@ FMT_CONSTEXPR20 auto format_float(Float value, int precision,
       exp += digits_in_the_first_segment - 1;
     }
   }
+  #endif  
+
   if (use_dragon) {
     auto f = basic_fp<uint128_t>();
     bool is_predecessor_closer = binary32 ? f.assign(static_cast<float>(value))

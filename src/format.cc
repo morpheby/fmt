@@ -16,10 +16,15 @@ template FMT_API auto locale_ref::get<std::locale>() const -> std::locale;
 
 namespace detail {
 
+#if FMT_FLOAT_SUPPORTED
 template FMT_API auto dragonbox::to_decimal(float x) noexcept
     -> dragonbox::decimal_fp<float>;
+#endif
+
+#if FMT_DOUBLE_SUPPORTED
 template FMT_API auto dragonbox::to_decimal(double x) noexcept
     -> dragonbox::decimal_fp<double>;
+#endif
 
 // Explicit instantiations for char.
 
