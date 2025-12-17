@@ -37,6 +37,7 @@ FMT_FUNC void assert_fail(const char* file, int line, const char* message) {
   // Use unchecked std::fprintf to avoid triggering another assertion when
   // writing to stderr fails.
   std::fputs(fmt::format(FMT_STRING("{:s}:{:d}: assertion failed: {:s}"), file, line, message).c_str(), stderr);
+  fflush(stderr);
   abort();
 }
 #endif
