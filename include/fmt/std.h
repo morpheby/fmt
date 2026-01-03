@@ -50,6 +50,10 @@
 #  include <version>
 #endif
 
+#if FMT_HAS_INCLUDE(<source_location>)
+#  include <source_location>
+#endif
+
 // GCC 4 does not support FMT_HAS_INCLUDE.
 #if FMT_HAS_INCLUDE(<cxxabi.h>) || defined(__GLIBCXX__)
 #  include <cxxabi.h>
