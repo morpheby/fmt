@@ -1313,7 +1313,11 @@ class utf8_to_utf16 {
   }
   inline auto size() const -> size_t { return buffer_.size() - 1; }
   inline auto c_str() const -> const wchar_t* { return &buffer_[0]; }
+  #if _LIBCPP_HAS_WIDE_CHARACTERS
   inline auto str() const -> std::wstring { return {&buffer_[0], size()}; }
+  #else
+  inline auto str() const -> std::string { abort(); return ""; }
+  #endif
 };
 
 enum class to_utf8_error_policy { abort, replace };
