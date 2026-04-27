@@ -726,8 +726,7 @@ template <typename T> struct is_floating_point : std::is_floating_point<T> {};
 template <> struct is_floating_point<float128> : std::true_type {};
 
 template <typename T, bool = is_floating_point<T>::value>
-struct is_fast_float : bool_constant<std::numeric_limits<T>::is_iec559 &&
-                                     sizeof(T) <= sizeof(double)> {};
+struct is_fast_float : bool_constant<sizeof(T) <= sizeof(double)> {};
 template <typename T> struct is_fast_float<T, false> : std::false_type {};
 
 template <typename T>
@@ -2649,7 +2648,7 @@ FMT_INLINE FMT_CONSTEXPR auto signbit(T value) -> bool {
     }
 #endif
   }
-  return std::signbit(static_cast<double>(value));
+  return std::signbit(value);
 }
 
 inline FMT_CONSTEXPR20 void adjust_precision(int& precision, int exp10) {
@@ -3048,10 +3047,6 @@ FMT_CONSTEXPR20 inline void format_dragon(basic_fp<uint128_t> value,
 template <typename Float, FMT_ENABLE_IF(!is_double_double<Float>::value)>
 FMT_CONSTEXPR20 void format_hexfloat(Float value, format_specs specs,
                                      buffer<char>& buf) {
-  // float is passed as double to reduce the number of instantiations and to
-  // simplify implementation.
-  static_assert(!std::is_same<Float, float>::value, "");
-
   using info = dragonbox::float_info<Float>;
 
   // Assume Float is in the format [sign][exponent][significand].
@@ -3146,8 +3141,6 @@ template <typename Float>
 FMT_CONSTEXPR20 auto format_float(Float value, int precision,
                                   const format_specs& specs, bool binary32,
                                   buffer<char>& buf) -> int {
-  // float is passed as double to reduce the number of instantiations.
-  static_assert(!std::is_same<Float, float>::value, "");
   auto converted_value = convert_float(value);
 
   const bool fixed = specs.type() == presentation_type::fixed;
@@ -3164,15 +3157,15 @@ FMT_CONSTEXPR20 auto format_float(Float value, int precision,
   int exp = 0;
   bool use_dragon = true;
   unsigned dragon_flags = 0;
-  if (!is_fast_float<Float>() || is_constant_evaluated()) {
-    const auto inv_log2_10 = 0.3010299956639812;  // 1 / log2(10)
+  if constexpr (!is_fast_float<Float>::value) {
+    const auto inv_log2_10 = 0.3010299956639812f;  // 1 / log2(10)
     using info = dragonbox::float_info<decltype(converted_value)>;
     const auto f = basic_fp<typename info::carrier_uint>(converted_value);
     // Compute exp, an approximate power of 10, such that
     //   10^(exp - 1) <= value < 10^exp or 10^exp <= value < 10^(exp + 1).
     // This is based on log10(value) == log2(value) / log2(10) and approximation
     // of log2(value) by e + num_fraction_bits idea from double-conversion.
-    auto e = (f.e + count_digits<1>(f.f) - 1) * inv_log2_10 - 1e-10;
+    auto e = (f.e + count_digits<1>(f.f) - 1) * inv_log2_10 - 1e-10f;
     exp = static_cast<int>(e);
     if (e > exp) ++exp;  // Compute ceil.
     dragon_flags = dragon::fixup;
