@@ -456,11 +456,12 @@ struct is_std_string_like<T, void_t<decltype(std::declval<T>().find_first_of(
 
 // Check if the literal encoding is UTF-8.
 enum { is_utf8_enabled = "\u00A7"[1] == '\xA7' };
-enum { use_utf8 = !FMT_WIN32 || is_utf8_enabled };
 
 #ifndef FMT_UNICODE
 #  define FMT_UNICODE 1
 #endif
+
+enum { use_utf8 = FMT_UNICODE && (!FMT_WIN32 || is_utf8_enabled) };
 
 static_assert(!FMT_UNICODE || use_utf8,
               "Unicode support requires compiling with /utf-8");
